@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace TagHelperWorkbench.TagHelpers
 {
@@ -34,17 +35,20 @@ namespace TagHelperWorkbench.TagHelpers
         private readonly IUrlHelperFactory urlHelperFactory;
         private readonly IActionContextAccessor actionContextAccessor;
         private readonly IHostingEnvironment environment;
+        private readonly IDistributedCache distributedCache;
 
         public IntegrityTagHelper(
             IUrlHelperFactory urlHelperFactory,
             IActionContextAccessor actionContextAccessor,
-            IHostingEnvironment environment)
+            IHostingEnvironment environment,
+            IDistributedCache distributedCache)
         {
             // https://stackoverflow.com/questions/40001242/aspnetcore-get-path-to-wwwroot-in-taghelper
 
             this.urlHelperFactory = urlHelperFactory;
             this.actionContextAccessor = actionContextAccessor;
             this.environment = environment;
+            this.distributedCache = distributedCache;
         }
 
         /// <summary>
@@ -54,8 +58,6 @@ namespace TagHelperWorkbench.TagHelpers
         /// The integrity.
         /// </value>
         public string Integrity { get; set; }
-
-        private static Dictionary<string, string> HashCache { get; } = new Dictionary<string, string>();
 
         public override void Process(TagHelperContext context, TagHelperOutput output)
         {
@@ -101,7 +103,9 @@ namespace TagHelperWorkbench.TagHelpers
 
             foreach (var path in this.GetFiles(source))
             {
-                if (HashCache.TryGetValue(path, out string integrityValue))
+                var key = "Integrity-" + path;
+                string integrityValue = distributedCache.GetString(key);
+                if (integrityValue != null)
                 {
                     yield return integrityValue;
                 }
@@ -115,7 +119,7 @@ namespace TagHelperWorkbench.TagHelpers
                         var b64 = Convert.ToBase64String(hash);
 
                         integrityValue = algorithm + "-" + b64;
-                        HashCache.Add(path, integrityValue);
+                        distributedCache.SetString(key, integrityValue);
                         yield return integrityValue;
                     }
                 }
