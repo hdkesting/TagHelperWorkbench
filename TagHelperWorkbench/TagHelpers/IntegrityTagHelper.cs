@@ -55,6 +55,8 @@ namespace TagHelperWorkbench.TagHelpers
         /// </value>
         public string Integrity { get; set; }
 
+        private static Dictionary<string, string> HashCache { get; } = new Dictionary<string, string>();
+
         public override void Process(TagHelperContext context, TagHelperOutput output)
         {
             if (string.IsNullOrWhiteSpace(this.Integrity))
@@ -63,15 +65,8 @@ namespace TagHelperWorkbench.TagHelpers
                 this.Integrity = "sha256";
             }
 
-            if (this.Integrity.Length > 6)
-            {
-                // assume already filled if longer than 6, so ignore
-                return;
-            }
-
             HashAlgorithm csp = null;
-            this.Integrity = this.Integrity.ToLowerInvariant();
-            switch (this.Integrity)
+            switch (this.Integrity.ToLowerInvariant())
             {
                 case "sha256":
                     csp = SHA256.Create();
@@ -88,7 +83,8 @@ namespace TagHelperWorkbench.TagHelpers
 
             if (csp == null)
             {
-                // unknown hash, just ignore
+                // unknown hash type or already filled, explicitly keep original value
+                output.Attributes.SetAttribute("integrity", this.Integrity);
                 return;
             }
 
@@ -96,22 +92,32 @@ namespace TagHelperWorkbench.TagHelpers
 
             var source = (context.AllAttributes["src"] ?? context.AllAttributes["href"]).Value.ToString();
 
-            output.Attributes.SetAttribute("integrity", string.Join(" ", this.GetHashes(source, csp, this.Integrity, urlHelper)));
+            output.Attributes.SetAttribute("integrity", string.Join(" ", this.GetHashes(source, csp, this.Integrity.ToLowerInvariant(), urlHelper)));
         }
 
         private IEnumerable<string> GetHashes(string source, HashAlgorithm csp, string algorithm, IUrlHelper urlHelper)
         {
-            // possible enhancement: cache the hashes (should I then handle changes to the files or leave that for a restart?)
+            // Cache the hashes. Leave a cache-reset for a site restart.
 
             foreach (var path in this.GetFiles(source))
             {
-                var fullPath = Path.Combine(this.environment.WebRootPath, urlHelper.Content(path));
-                if (File.Exists(fullPath))
+                if (HashCache.TryGetValue(path, out string integrityValue))
                 {
-                    var data = File.ReadAllBytes(fullPath);
-                    var hash = csp.ComputeHash(data);
-                    var b64 = Convert.ToBase64String(hash);
-                    yield return algorithm + "-" + b64;
+                    yield return integrityValue;
+                }
+                else
+                {
+                    var fullPath = Path.Combine(this.environment.WebRootPath, urlHelper.Content(path));
+                    if (File.Exists(fullPath))
+                    {
+                        var data = File.ReadAllBytes(fullPath);
+                        var hash = csp.ComputeHash(data);
+                        var b64 = Convert.ToBase64String(hash);
+
+                        integrityValue = algorithm + "-" + b64;
+                        HashCache.Add(path, integrityValue);
+                        yield return integrityValue;
+                    }
                 }
             }
         }
