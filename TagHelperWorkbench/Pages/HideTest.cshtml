@@ -1,0 +1,28 @@
+﻿@page
+@model TagHelperWorkbench.Pages.HideTestModel
+@{
+    ViewData["Title"] = "HideTest";
+}
+
+<h2>Hide Test</h2>
+<p>
+    Testpage for taghelper "HideParent". This should remove the parent from around some html. Sample usage: remove a hyperlink if there is nothing to point to.
+</p>
+<p>
+    Current value: @Model.Show
+</p>
+
+<p>
+    <a asp-page="HideTest" hide="Model.Show" class="alert alert-info">
+        There should be a link around this text when the value is False.
+        <span bold someunknownattribute="@Model.Show">@Model.Message</span>
+    </a>
+</p>
+
+<p>
+    <a asp-page="HideTest" Hide="!Model.Show" class="alert alert-info">
+        There should be a link around this text when the value is True.
+        <span bold someunknownattribute="@(!Model.Show)">@Model.Message</span>
+    </a>
+</p>
+
